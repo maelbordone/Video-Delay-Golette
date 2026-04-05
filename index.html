@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Video Delay Golette</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #171a21;
+      --panel-2: #1f2430;
+      --border: #2d3444;
+      --text: #f4f7fb;
+      --muted: #b6c0d1;
+      --accent: #ffffff;
+      --danger: #d9534f;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    body {
+      min-height: 100vh;
+    }
+
+    .app {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 10px;
+    }
+
+    .header {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px;
+    }
+
+    .title {
+      margin: 0;
+      font-size: clamp(22px, 3vw, 34px);
+      line-height: 1.1;
+      font-weight: 800;
+      letter-spacing: 0.2px;
+      text-align: center;
+    }
+
+    .subtitle {
+      margin-top: 6px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .controls {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    button {
+      border: none;
+      border-radius: 14px;
+      padding: 14px 18px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      background: var(--accent);
+      color: #000;
+      min-height: 50px;
+    }
+
+    button.secondary {
+      background: var(--panel-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    button.stop {
+      background: #2a2a2a;
+      color: #fff;
+      border: 1px solid #414141;
+    }
+
+    .label {
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .range-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      width: 100%;
+    }
+
+    input[type="range"] {
+      flex: 1;
+      min-width: 180px;
+    }
+
+    .delay-value {
+      min-width: 88px;
+      font-size: 18px;
+      font-weight: 800;
+      text-align: right;
+    }
+
+    .status {
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .viewer-section {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+    }
+
+    .viewer-shell {
+      width: 100%;
+      flex: 1;
+      background: #000;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 280px;
+    }
+
+    canvas#output {
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #000;
+    }
+
+    .overlay-top {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      pointer-events: none;
+    }
+
+    .badge {
+      background: rgba(0, 0, 0, 0.55);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 700;
+      backdrop-filter: blur(4px);
+    }
+
+    .hint {
+      background: rgba(0, 0, 0, 0.55);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      backdrop-filter: blur(4px);
+    }
+
+    video,
+    canvas#capture {
+      display: none;
+    }
+
+    @media (orientation: landscape) {
+      .app {
+        padding: 10px;
+      }
+
+      .controls {
+        padding: 10px;
+      }
+
+      .viewer-shell {
+        min-height: calc(100vh - 220px);
+      }
+    }
+
+    @media (max-width: 900px) {
+      button {
+        flex: 1 1 auto;
+      }
+
+      .delay-value {
+        text-align: left;
+      }
+    }
+
+    @media (max-width: 700px) {
+      .row {
+        align-items: stretch;
+      }
+
+      button {
+        width: 100%;
+      }
+
+      .viewer-shell {
+        min-height: 52vh;
+      }
+    }
+
+    .fullscreen-mode {
+      width: 100vw !important;
+      height: 100vh !important;
+      border-radius: 0 !important;
+      border: none !important;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <h1 class="title">Video Delay Golette</h1>
+      <div class="subtitle">Affichage différé optimisé pour iPad / iPhone</div>
+    </div>
+
+    <div class="controls">
+      <div class="row">
+        <button id="startBtn">Activer la caméra</button>
+        <button id="stopBtn" class="stop">Arrêter</button>
+        <button id="flipBtn" class="secondary">Caméra arrière</button>
+        <button id="fullscreenBtn" class="secondary">Plein écran</button>
+      </div>
+
+      <div class="row">
+        <div class="label">Délai de capture</div>
+      </div>
+
+      <div class="range-wrap">
+        <input id="delayRange" type="range" min="0" max="30" step="1" value="15" />
+        <div class="delay-value" id="delayValue">15 s</div>
+      </div>
+
+      <div class="status" id="status">
+        En attente d’autorisation pour la caméra.
+      </div>
+    </div>
+
+    <div class="viewer-section">
+      <div class="viewer-shell" id="viewerShell">
+        <canvas id="output"></canvas>
+
+        <div class="overlay-top">
+          <div class="badge" id="overlayDelay">Délai : 15 s</div>
+          <div class="hint">Mode paysage conseillé</div>
+        </div>
+      </div>
+    </div>
+
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="capture"></canvas>
+  </div>
+
+  <script>
+    const video = document.getElementById("video");
+    const captureCanvas = document.getElementById("capture");
+    const outputCanvas = document.getElementById("output");
+    const captureCtx = captureCanvas.getContext("2d", { alpha: false });
+    const outputCtx = outputCanvas.getContext("2d", { alpha: false });
+
+    const startBtn = document.getElementById("startBtn");
+    const stopBtn = document.getElementById("stopBtn");
+    const flipBtn = document.getElementById("flipBtn");
+    const fullscreenBtn = document.getElementById("fullscreenBtn");
+    const delayRange = document.getElementById("delayRange");
+    const delayValue = document.getElementById("delayValue");
+    const overlayDelay = document.getElementById("overlayDelay");
+    const statusEl = document.getElementById("status");
+    const viewerShell = document.getElementById("viewerShell");
+
+    let stream = null;
+    let running = false;
+    let facingMode = "environment";
+    let frames = [];
+    let captureInterval = null;
+    let renderAnimation = null;
+
+    const CAPTURE_FPS = 8;
+    const CAPTURE_INTERVAL_MS = 1000 / CAPTURE_FPS;
+    const MAX_EXTRA_KEEP_MS = 5000;
+
+    function setStatus(text) {
+      statusEl.textContent = text;
+    }
+
+    function updateDelayDisplay() {
+      const delay = Number(delayRange.value);
+      delayValue.textContent = `${delay} s`;
+      overlayDelay.textContent = `Délai : ${delay} s`;
+    }
+
+    updateDelayDisplay();
+    delayRange.addEventListener("input", updateDelayDisplay);
+
+    function resizeOutputCanvas() {
+      const rect = outputCanvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      outputCanvas.width = Math.max(1, Math.floor(rect.width * dpr));
+      outputCanvas.height = Math.max(1, Math.floor(rect.height * dpr));
+    }
+
+    window.addEventListener("resize", resizeOutputCanvas);
+
+    function clearOutput() {
+      outputCtx.fillStyle = "black";
+      outputCtx.fillRect(0, 0, outputCanvas.width, outputCanvas.height);
+    }
+
+    function drawMessage(text) {
+      clearOutput();
+      outputCtx.fillStyle = "#ffffff";
+      outputCtx.font = `${Math.max(16, outputCanvas.width * 0.025)}px Arial`;
+      outputCtx.textAlign = "center";
+      outputCtx.textBaseline = "middle";
+      outputCtx.fillText(text, outputCanvas.width / 2, outputCanvas.height / 2);
+    }
+
+    async function startCamera() {
+      stopCamera(false);
+
+      try {
+        setStatus("Demande d’accès à la caméra...");
+        frames = [];
+
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: facingMode },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        });
+
+        video.srcObject = stream;
+        await video.play();
+
+        const vw = video.videoWidth || 640;
+        const vh = video.videoHeight || 360;
+
+        const targetWidth = 640;
+        const targetHeight = Math.round((vh / vw) * targetWidth);
+
+        captureCanvas.width = targetWidth;
+        captureCanvas.height = targetHeight;
+
+        running = true;
+        resizeOutputCanvas();
+        startCaptureLoop();
+        startRenderLoop();
+
+        setStatus("Caméra activée. Le flux différé est en cours.");
+      } catch (err) {
+        console.error(err);
+        setStatus("Impossible d’accéder à la caméra. Vérifie les autorisations Safari et l’hébergement HTTPS.");
+      }
+    }
+
+    function stopCamera(updateStatus = true) {
+      running = false;
+
+      if (captureInterval) {
+        clearInterval(captureInterval);
+        captureInterval = null;
+      }
+
+      if (renderAnimation) {
+        cancelAnimationFrame(renderAnimation);
+        renderAnimation = null;
+      }
+
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+      }
+
+      video.srcObject = null;
+
+      for (const frame of frames) {
+        try {
+          frame.bitmap.close();
+        } catch (_) {}
+      }
+      frames = [];
+
+      clearOutput();
+
+      if (updateStatus) {
+        setStatus("Caméra arrêtée.");
+      }
+    }
+
+    async function captureFrame() {
+      if (!running || !video.videoWidth || !video.videoHeight) return;
+
+      try {
+        captureCtx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+        const bitmap = await createImageBitmap(captureCanvas);
+
+        frames.push({
+          time: performance.now(),
+          bitmap
+        });
+
+        cleanupOldFrames();
+      } catch (err) {
+        console.error("Erreur capture :", err);
+      }
+    }
+
+    function cleanupOldFrames() {
+      const now = performance.now();
+      const delayMs = Number(delayRange.value) * 1000;
+      const keepMs = delayMs + MAX_EXTRA_KEEP_MS;
+
+      while (frames.length > 0 && now - frames[0].time > keepMs) {
+        const old = frames.shift();
+        try {
+          old.bitmap.close();
+        } catch (_) {}
+      }
+    }
+
+    function getFrameForDelay() {
+      const now = performance.now();
+      const targetTime = now - (Number(delayRange.value) * 1000);
+
+      let candidate = null;
+
+      for (let i = 0; i < frames.length; i++) {
+        if (frames[i].time <= targetTime) {
+          candidate = frames[i];
+        } else {
+          break;
+        }
+      }
+
+      return candidate;
+    }
+
+    function drawSourceToOutput(source, sourceWidth, sourceHeight) {
+      const cw = outputCanvas.width;
+      const ch = outputCanvas.height;
+
+      const scale = Math.min(cw / sourceWidth, ch / sourceHeight);
+      const drawW = sourceWidth * scale;
+      const drawH = sourceHeight * scale;
+      const x = (cw - drawW) / 2;
+      const y = (ch - drawH) / 2;
+
+      outputCtx.fillStyle = "black";
+      outputCtx.fillRect(0, 0, cw, ch);
+      outputCtx.drawImage(source, x, y, drawW, drawH);
+    }
+
+    function startCaptureLoop() {
+      captureInterval = setInterval(() => {
+        captureFrame();
+      }, CAPTURE_INTERVAL_MS);
+    }
+
+    function startRenderLoop() {
+      const render = () => {
+        if (!running) return;
+
+        const delay = Number(delayRange.value);
+        const frame = getFrameForDelay();
+
+        if (delay === 0 && video.videoWidth) {
+          drawSourceToOutput(video, video.videoWidth, video.videoHeight);
+        } else if (frame) {
+          drawSourceToOutput(frame.bitmap, frame.bitmap.width, frame.bitmap.height);
+        } else {
+          drawMessage("Buffer en cours...");
+        }
+
+        renderAnimation = requestAnimationFrame(render);
+      };
+
+      render();
+    }
+
+    async function toggleFullscreen() {
+      try {
+        if (!document.fullscreenElement) {
+          if (viewerShell.requestFullscreen) {
+            await viewerShell.requestFullscreen();
+          } else {
+            setStatus("Le plein écran n’est pas pris en charge ici.");
+            return;
+          }
+        } else {
+          if (document.exitFullscreen) {
+            await document.exitFullscreen();
+          }
+        }
+      } catch (err) {
+        console.error(err);
+        setStatus("Impossible d’ouvrir le plein écran sur cet appareil.");
+      }
+    }
+
+    document.addEventListener("fullscreenchange", () => {
+      const isFs = !!document.fullscreenElement;
+      fullscreenBtn.textContent = isFs ? "Quitter le plein écran" : "Plein écran";
+
+      if (isFs) {
+        viewerShell.classList.add("fullscreen-mode");
+      } else {
+        viewerShell.classList.remove("fullscreen-mode");
+      }
+
+      setTimeout(resizeOutputCanvas, 80);
+    });
+
+    startBtn.addEventListener("click", async () => {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setStatus("Ce navigateur ne gère pas correctement l’accès caméra.");
+        return;
+      }
+      await startCamera();
+    });
+
+    stopBtn.addEventListener("click", () => {
+      stopCamera(true);
+    });
+
+    flipBtn.addEventListener("click", async () => {
+      facingMode = facingMode === "environment" ? "user" : "environment";
+      flipBtn.textContent = facingMode === "environment" ? "Caméra arrière" : "Caméra avant";
+
+      if (running) {
+        await startCamera();
+      }
+    });
+
+    fullscreenBtn.addEventListener("click", async () => {
+      await toggleFullscreen();
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden && running) {
+        setStatus("Page mise en arrière-plan. iPad/iPhone peuvent ralentir ou suspendre le flux.");
+      }
+    });
+
+    window.addEventListener("load", () => {
+      resizeOutputCanvas();
+      drawMessage("Active la caméra");
+    });
+  </script>
+</body>
+</html>
